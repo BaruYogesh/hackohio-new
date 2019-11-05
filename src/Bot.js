@@ -1,6 +1,12 @@
 const Discord = require("discord.js");
 const client = new Discord.Client();
 const config = require('./config.json');
+const fs = require('fs');
+
+const prof = require('./profile.json');
+const chn = require('./channel.json');
+const usr = require('./user.json');
+
 var Sequelize = require('sequelize');
 var sequelize = new Sequelize('database', 'username', 'password', {
   host: 'localhost',
@@ -18,59 +24,42 @@ var User = sequelize.define('user', {
 const ta = require('./TextAnalysis');
 
 client.on("ready", () => {
-  // Check if the table points exist
-  //const profile = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'profile';").get();  
-  //const channelMood = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'channelMood';").get();
-  //const userMood = sql.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name = 'userMood';").get();
-  /*
-  // If "profile" does not exist add it
-  if (!profile['id']) {
-    sql.prepare("CREATE TABLE profile (id TEXT PRIMARY KEY, user TEXT, response_one TEXT," +
-    "response_two TEXT, response_three TEXT, mood FLOAT, related TEXT, language TEXT);").run();
-    // Ensure that the "id" row is always unique and indexed
-    sql.prepare("CREATE UNIQUE INDEX idx_profile_id ON profile (id);").run();
-    sql.pragma("synchronous = 1");
-    sql.pragma("journal_mode = wal");
-  }
 
-  // If "channelMood" does not exist add it
-  if (!channelMood['id']) {
-    // If the table is not there, create it and setup the database correctly
-    sql.prepare("CREATE TABLE channelMood (id TEXT, mood FLOAT, time TEXT);").run();
-    // Ensure that the "id" row is always unique and indexed
-    //sql.prepare("CREATE UNIQUE INDEX idx_channelMood_id ON channelMood (id);").run();
-    sql.pragma("synchronous = 1");
-    sql.pragma("journal_mode = wal");
-  }
-
-  // If "userMood" does not exist add it
-  if (!userMood['id']) {
-    // If the table is not there, create it and setup the database correctly
-    sql.prepare("CREATE TABLE userMood (id TEXT, mood FLOAT, time TEXT);").run();
-    // Ensure that the "id" row is always unique and indexed
-    //sql.prepare("CREATE UNIQUE INDEX idx_userMood_id ON userMood (id);").run();
-    sql.pragma("synchronous = 1");
-    sql.pragma("journal_mode = wal");
-  }
-
-  // Get and set the data for "profile"
-  client.getProfile = sql.prepare("SELECT * FROM profile WHERE id = ?");
-  client.setProfile = sql.prepare("INSERT OR REPLACE INTO profile (id, user, response_one, response_two," +
-  "response_three, mood, related, language) VALUES (@id, @user, @response_one, @response_two, @response_three, @mood, @related, @language);");
-
-  // Get and set the data for "channelMood"
-  client.getChannelMood = sql.prepare("SELECT * FROM channelMood WHERE id = ?");
-  client.setChannelMood = sql.prepare("INSERT OR REPLACE INTO channelMood (id, mood, time) VALUES (@id, @mood, @time);");
-
-  // Get and set the data for "userMood"
-  client.getUserMood = sql.prepare("SELECT * FROM userMood WHERE id = ?");
-  client.setUserMood = sql.prepare("INSERT OR REPLACE INTO userMood (id, mood, time) VALUES (@id, @mood, @time);");
-  */
 });
 
 client.on("message", (message) => {
 
+  if(message.author.bot) return;
+
   let prefix = config.prefix;
+
+  /*
+  prof.profiles.push({"id": message.author.id, "interest": collected.first().content, "sentiment": 0.5});
+      fs.writeFile('./src/profile.json', JSON.stringify(prof), 'utf8', function(err){
+        if(err) return console.log(err);
+        console.log("The file was saved!");
+      });
+  */
+
+  async function getSentiment() {
+
+    const sent = await ta.analyzeSentence(message.content);
+
+    //console.log(sent);
+    chn.messages.push({
+      "id": message.author.id,
+      "sentiment": sent,
+      "time": message.createdAt
+    })
+
+    fs.writeFile('./src/channel.json', JSON.stringify(chn), 'utf8', function (err) {
+      if (err) return console.log(err);
+      console.log("The file was saved!");
+    });
+
+  }
+
+  getSentiment();
 
   if (message.content.startsWith("ping")) {
     message.channel.send("pong!");
@@ -83,60 +72,106 @@ client.on("message", (message) => {
       }
     }
   }
-  /*
-  if (message.content.startsWith(prefix + "updateUserMood")){
 
-    let userMood = client.getUserMood.get(message.author.id);
-    if(!userMood){
-      userMood = {
-        id: message.author.id,
-        mood: 0,
-        time: message.createdAt
-      }
+  if (message.content.startsWith(prefix + "chatmood")) {
+    let scores = 0;
+    let i = 0;
+    for (i = 0; i < chn.messages.length; i++) {
+      scores += chn.messages[i].sentiment;
     }
-
-    let args = message.content.slice(prefix.length).trim.split(/ + /g);
-    userMood.mood = args[1];
-    console.log(userMood.mood);
+    message.reply(Math.round(scores / (i + 1) * 100) / 100);
   }
-  */
   //
   if (message.content.startsWith(prefix + 'profile')) {
+    console.log(prof.profiles);
+    const profID = prof.profiles.find((element) => {
+      if (element.id === message.author.id) {
 
-    message.author.createDM().then((channel) => {
+        //console.log(element.id);
+        return element;
 
-      channel.send("What is your favorite game?").then(() => {
+      }
+    })
+    //console.log(profID);
+    if (profID) {
+      let embed = new Discord.RichEmbed();
 
-        channel.awaitMessages(response => response.content, {
-            max: 1,
-            time: 20000,
-            errors: ['time'],
-          })
-          .then((collected) => {
-            //channel.send(collected.first().content);
-            console.log(collected.first().content);
-          })
-          .catch(() => {
-            channel.send("no message");
-          })
+      embed.setTitle(message.author.username);
+      embed.addField('Favorite Game', profID.interest);
+      embed.setThumbnail(message.author.avatarURL);
+      embed.addField('Sentiment Coefficient', profID.sentiment);
 
-      })
+      message.reply(embed);
+    } else {
+      message.author.createDM().then((channel) => {
 
-    });
+
+
+        channel.send("What is your favorite game?").then(() => {
+
+          channel.awaitMessages(response => response.content, {
+              max: 1,
+              time: 20000,
+              errors: ['time'],
+            })
+            .then((collected) => {
+              //channel.send(collected.first().content);
+              console.log(collected.first().content, "was collected");
+              prof.profiles.push({
+                "id": message.author.id,
+                "interest": collected.first().content,
+                "sentiment": 0.5
+              });
+              fs.writeFile('./src/profile.json', JSON.stringify(prof), 'utf8', function (err) {
+                if (err) return console.log(err);
+                console.log("The file was saved!");
+              });
+              message.reply("profile has been created for you");
+            })
+            .catch(() => {
+              channel.send("no message");
+            })
+
+        })
+
+      });
+    }
+
+  }
+  if (message.content.startsWith(prefix + 'mymood') || message.content.startsWith(prefix + 'mm')) {
+    let i = 0;
+    let count = 0;
+    let avg = 0;
+
+    for (i = 0; i < chn.messages.length; i++) {
+      if (chn.messages[i].id === message.author.id) {
+        avg += chn.messages[i].sentiment;
+        count++;
+      }
+    }
+    console.log(i, count, avg);
+    message.reply(Math.round((avg / count)*100)/100);
   }
 
   if (message.content.startsWith(prefix + 'analyzetext') || message.content.startsWith(prefix + 'at')) {
 
     console.log(message.content);
     ta.analyzeSentence(message.content).then((result) => {
-      message.reply(result);
+      message.reply(Math.round(result * 100) / 100);
     });
   }
 
+  if (message.content.startsWith(prefix + 'help') || message.content.startsWith(prefix + 'h')) {
+    message.channel.send("!analyzetext YOURTEXT or !at YOURTEXT\n!mymood or !mm (know your mood) \n!chatmood (know your channel)\n!profile (view your profile)");
+    }
 });
 
-export function login() {
+function login() {
   client.login(config.botToken);
+}
+
+module.exports = {
+  login
 }
 
 

@@ -27,7 +27,7 @@ const endpoint = config.azureEndpoint;
 const creds = new CognitiveServicesCredentials.ApiKeyCredentials({ inHeader: { 'Ocp-Apim-Subscription-Key': subscription_key } });
 const client = new TextAnalyticsAPIClient.TextAnalyticsClient(creds, endpoint);
 
-export async function analyzeSentence(sentence){
+async function analyzeSentence(sentence){
 
     const inputDocuments = {documents:[
         {language:"en", id:"1", text:sentence}
@@ -36,12 +36,12 @@ export async function analyzeSentence(sentence){
     const result = await client.sentiment({multiLanguageBatchInput: inputDocuments});
 
     console.log(result.documents[0].score);
-    console.log(inputDocuments);
-    return(parseFloat(result.documents[0].score));
+    //console.log(inputDocuments);
+    return((result.documents[0].score));
    
 }
 
-export async function analyzeMultipleSentences(sentences){
+async function analyzeMultipleSentences(sentences){
 
     const inputDocuments = {documents:[]};
     let count = 1;
@@ -70,7 +70,59 @@ export async function analyzeMultipleSentences(sentences){
     return documentScores;
 }
 
-export function analyzeUser(userID){
+async function anazlyeKeywords(sentences, posNegDivide = .5){
+
+    const inputDocuments = {documents:[]};
+    let count = 1;
+
+    sentences.forEach(element => {
+        inputDocuments.documents[count-1] = ({language:"en", id:count.toString(), text:element});
+        count++;    
+    });
+
+    const phrases = await client.keyPhrases({multiLanguageBatchInput: inputDocuments});
+
+    const sents = await client.sentiment({multiLanguageBatchInput: inputDocuments});
+
+    let positive = [];
+    let negative = [];
+    for(let i =0;i<sents.length;i++){
+
+        if(sents[i] > posNegDivide){
+            positive.push(phrases[i]);
+        }
+        else{
+            negative.push(phrases[i]);
+        }
+    }
+    positive.sort();
+    negative.sort();
+
+    var positiveCounts = {};
+    positive.forEach(function(x) { positiveCounts[x] = (positiveCounts[x] || 0)+1; });
+
+    var negativeCounts = {};
+    negative.forEach(function(x) { negativeCounts[x] = (negativeCounts[x] || 0)+1; });
+
+
+    var obj = {pos: positiveCounts, neg: negativeCounts};
+    
+    console.log(positiveCounts);
+    console.log(negativeCounts);
+
+    return obj;
+
+
+}
+
+function analyzeUser(userID){
     
 
+}
+
+module.exports = {
+    analyzeSentence,
+    analyzeMultipleSentences,
+    anazlyeKeywords,
+    analyzeUser
 }

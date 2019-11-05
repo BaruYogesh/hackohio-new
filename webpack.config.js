@@ -17,5 +17,17 @@ module.exports = {
       template: 'index.html',
       title: 'HTML Webpack Plugin'
     })
+  ],
+  rules: [
+    {
+      test: /\.jsx?/,
+      include: '/src',
+      use: {
+        loader: 'babel-loader',
+        options: {
+          presets: ['es2015']
+        }
+      }
+    }
   ]
 };
